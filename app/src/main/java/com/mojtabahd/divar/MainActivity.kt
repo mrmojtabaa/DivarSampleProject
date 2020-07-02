@@ -1,11 +1,27 @@
 package com.mojtabahd.divar
 
 import android.os.Bundle
-import com.google.android.material.floatingactionbutton.FloatingActionButton
-import com.google.android.material.snackbar.Snackbar
-import androidx.appcompat.app.AppCompatActivity
 import android.view.Menu
 import android.view.MenuItem
+import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.snackbar.Snackbar
+import com.mojtabahd.divar.entitiy.SearchResponse
+import com.mojtabahd.divar.entitiy.Category
+import com.mojtabahd.divar.entitiy.Json_schema
+import com.mojtabahd.divar.entitiy.DivarSearchRequest
+import kotlinx.android.synthetic.main.fragment_first.*
+import okhttp3.Interceptor
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+import timber.log.Timber
+import java.lang.StringBuilder
+
 
 class MainActivity : AppCompatActivity() {
 
@@ -14,10 +30,65 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         setSupportActionBar(findViewById(R.id.toolbar))
 
+        Timber.tag("LifeCycles");
+        Timber.d("Activity Created");
+
+        val service = createApiService()
+        val request = service.search(DivarSearchRequest(Json_schema(Category("ROOT")), 0))
+
+        request?.enqueue(object : Callback<SearchResponse?> {
+            override fun onFailure(call: Call<SearchResponse?>, t: Throwable) {
+                Timber.tag("onFailure").d(t)
+                textview_first.text = t.toString()
+            }
+
+            override fun onResponse(
+                call: Call<SearchResponse?>,
+                response: Response<SearchResponse?>
+            ) {
+                Timber.tag("onResponse").d(response.toString())
+                val sb = StringBuilder()
+                requireNotNull(response.body())
+                    .widget_list.forEach {
+                        with(sb)
+                        {
+                            append("\n")
+                            append(it.data.title)
+                            append("\n")
+                            append(it.data.normal_text)
+                            append("\n")
+                        }
+                    }
+
+                textview_first.text = sb.toString()
+            }
+        })
+
+
         findViewById<FloatingActionButton>(R.id.fab).setOnClickListener { view ->
             Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                    .setAction("Action", null).show()
+                .setAction("Action", null).show()
         }
+    }
+
+    private fun createApiService(): DivarApiService {
+        val clientBuilder = OkHttpClient.Builder()
+        clientBuilder.addInterceptor { chain: Interceptor.Chain ->
+            val divarSearchRequest: Request =
+                chain.request().newBuilder().addHeader("parameter", "value").build()
+            Timber.tag("request body ==> ").d(chain.request().body().toString())
+            val response = chain.proceed(divarSearchRequest)
+            Timber.tag("response body ==> ").d(response.body().toString())
+            response
+        }
+
+        val retrofit = Retrofit.Builder()
+            .baseUrl("https://api.divar.ir/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .client(OkHttpClient())
+            .build()
+
+        return retrofit.create(DivarApiService::class.java)
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
